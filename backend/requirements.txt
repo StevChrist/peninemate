@@ -1,0 +1,22 @@
+# Core Dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Database
+psycopg>=3.1.0
+psycopg2-binary>=2.9.9
+
+# AI/ML
+faiss-cpu>=1.13.0
+sentence-transformers>=5.0.0
+
+# API (jika sudah ada)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+
+# Testing
+pytest>=7.4.0
+
+# LLM
+openai==1.6.1

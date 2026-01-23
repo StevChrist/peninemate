@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #463F3A;
+  --text: #F4F3EE;
+  --highlight: #E0AFA0;
+  --box: #BCB8B1;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text);
+  font-family: var(--font-inter);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-oswald);
+}
+
+/* Clear space utility */
+.clear-space {
+  padding-left: 70px;
+  padding-right: 70px;
+}
+
+/* Responsive clear space */
+@media (max-width: 768px) {
+  .clear-space {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+}
+
+/* Loading dots animation */
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.animate-bounce {
+  animation: bounce 0.6s infinite;
+}
+
+/* Custom scrollbar for chat */
+.overflow-y-auto::-webkit-scrollbar {
+  width: 6px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb {
+  background: #BCB8B1;
+  border-radius: 3px;
+}
+
+.overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background: #E0AFA0;
+}
+
+/* Radio button custom styling */
+input[type="radio"] {
+  appearance: none;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #BCB8B1;
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+}
+
+input[type="radio"]:checked {
+  border-color: #E0AFA0;
+}
+
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: #E0AFA0;
+  border-radius: 50%;
+}
+
+/* Modal animation */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.fixed .relative {
+  animation: modalFadeIn 0.2s ease-out;
+}
+
+

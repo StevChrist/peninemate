@@ -1,0 +1,167 @@
+# ======================
+# Python / Backend
+# ======================
+# Byte-compiled / optimized / DLL files
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.py[cod]
+backend/**/*.py[cod]
+backend/*$py.class
+
+# Virtual environments
+backend/.venv/
+backend/venv/
+backend/ENV/
+backend/env/
+backend/.Python
+
+# Testing
+backend/.pytest_cache/
+backend/.tox/
+backend/.coverage
+backend/htmlcov/
+backend/.mypy_cache/
+backend/.dmypy.json
+backend/dmypy.json
+
+# Environment variables
+backend/.env
+backend/.env.*
+backend/.env.local
+backend/.env.production
+
+# Dataset besar
+backend/dataset/
+backend/dataset/**
+
+# FAISS generated files (keep structure, ignore data)
+backend/peninemate/core_logic/data/*.index
+backend/peninemate/core_logic/data/*.json
+backend/peninemate/core_logic/data/faiss_*.index
+backend/peninemate/core_logic/data/faiss_metadata.json
+
+# Database files (jika ada SQLite untuk testing)
+backend/*.db
+backend/*.sqlite
+backend/*.sqlite3
+
+# Internal documentation
+backend/.app_document/
+
+# Jupyter notebooks checkpoints
+backend/.ipynb_checkpoints/
+
+# ======================
+# Node / Frontend
+# ======================
+# Dependencies
+frontend/node_modules/
+frontend/package-lock.json  # ⚠️ OPTIONAL: hapus jika team perlu lock file
+frontend/yarn.lock          # ⚠️ OPTIONAL: hapus jika pakai yarn
+
+# Build outputs
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+
+# Cache & temp files
+frontend/.turbo/
+frontend/.cache/
+frontend/.swc/
+frontend/.parcel-cache/
+
+# Environment variables
+frontend/.env
+frontend/.env.*
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Testing
+frontend/coverage/
+frontend/.nyc_output/
+
+# Debug logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/lerna-debug.log*
+frontend/.pnpm-debug.log*
+
+# ======================
+# Docker
+# ======================
+# Docker volumes data (jika ada)
+docker-volumes/
+postgres_data/
+faiss_data/
+ollama_data/
+
+# Docker build cache (optional)
+.dockerignore.bak
+
+# ======================
+# General / OS
+# ======================
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+
+# Environment files (root level)
+.env
+.env.*
+!.env.example  # ✅ Keep .env.example for documentation
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# Compression files
+*.tar
+*.tar.gz
+*.zip
+*.rar
+
+# ======================
+# Project Specific
+# ======================
+# Transfer files (jangan commit compressed project)
+peninemate.tar.gz
+*.tar.gz
+
+# Local development files
+local_dev/
+scratch/
+temp/
+
+# Documentation builds (if using Sphinx/MkDocs)
+docs/_build/
+docs/.doctrees/
+site/
+
+# ====================== other
+struktur_project.txt

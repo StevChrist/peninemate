@@ -335,7 +335,7 @@ async def health_check():
             stats = cache.get_stats()
             cache_status["size"] = stats.get("size", 0)
             hit_rate = stats.get("hit_rate", 0)
-            cache_status["hit_rate"] = f"{hit_rate:.1f}%"
+            cache_status["hit_rate"] = hit_rate
             
             logger.info(f"✅ Cache: {cache_status['size']} entries, {cache_status['hit_rate']} hit rate")
         except Exception as e:

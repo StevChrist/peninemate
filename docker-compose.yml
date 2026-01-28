@@ -59,7 +59,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - http://100.118.33.12:8000
+      - NEXT_PUBLIC_API_URL=http://100.118.33.12:8000
     depends_on:
       - backend
     networks:

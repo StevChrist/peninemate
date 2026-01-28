@@ -1,72 +1,77 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     container_name: peninemate_postgres
-    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-peninemate_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-peninemate_pass_2026}
-      POSTGRES_DB: ${POSTGRES_DB:-peninemate_db}
+      POSTGRES_DB: ${DB_NAME:-peninematedb}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-peninemate}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     ports:
       - "5432:5432"
     networks:
       - peninemate_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U peninemate_user -d peninemate_db"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  # Backend FastAPI
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: peninemate_backend
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=postgresql://peninemate_user:peninemate_pass_2026@postgres:5432/peninemate_db
-      - TMDB_API_KEY=${TMDB_API_KEY}
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - faiss_data:/app/peninemate/core_logic/data
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-peninematedb}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-peninemate}
+      - OLLAMA_BASE_URL=http://172.17.0.1:11434
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - peninemate_network
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    extra_hosts:
+      - "host.docker.internal:172.17.0.1"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
-  # Frontend Next.js
   frontend:
     build:
-      context: ./frontend
+      context: ./peninemate-frontend
       dockerfile: Dockerfile
     container_name: peninemate_frontend
-    restart: unless-stopped
-    environment:
-      - NEXT_PUBLIC_API_URL=http://100.118.33.12:8000
     ports:
-      - "3000:3000"
+      - "3001:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
       - backend
     networks:
       - peninemate_network
-
-volumes:
-  postgres_data:
-    driver: local
-  faiss_data:
-    driver: local
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
 
 networks:
   peninemate_network:
     driver: bridge
+
+volumes:
+  postgres_data:

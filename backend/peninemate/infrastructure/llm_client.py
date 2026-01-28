@@ -14,15 +14,19 @@ logger = logging.getLogger(__name__)
 class QwenClient:
     """Client for Qwen 2.5 3B Instruct model via Ollama"""
     
-    def __init__(self, base_url: str = "http://localhost:11434"):
-        self.base_url = base_url
+    def __init__(self, base_url: str = None):
+        import os
+        # Priority: parameter > env var > Docker bridge IP
+        self.base_url = base_url or os.getenv(
+            "OLLAMA_BASE_URL", 
+            "http://172.17.0.1:11434"  # Default for Docker
+        )
         self.model = "qwen2.5:3b-instruct"
-        self._check_model()
     
     def _check_model(self):
         """Check if model is available"""
         try:
-            response = requests.get(f"{self.base_url}/api/tags")
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
             if response.status_code == 200:
                 models = response.json().get('models', [])
                 if any(m['name'] == self.model for m in models):

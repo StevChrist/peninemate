@@ -443,3 +443,57 @@ async def get_stats():
     except Exception as e:
         logger.error(f"❌ Error in stats endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# LLM STATUS ENDPOINT
+# ============================================================================
+
+@router.get("/llm/status")
+async def llm_status():
+    """
+    Check LLM (Ollama) service status
+    
+    Response:
+    - status: "healthy" | "unhealthy" | "error"
+    - model: Model name
+    - available: Boolean
+    - base_url: Ollama URL
+    """
+    try:
+        import os
+        import requests
+        
+        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://172.17.0.1:11434")
+        
+        response = requests.get(
+            f"{ollama_url}/api/tags",
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            qwen_model = next(
+                (m for m in models if 'qwen2.5:3b-instruct' in m['name']),
+                None
+            )
+            
+            return {
+                "status": "healthy",
+                "model": "qwen2.5:3b-instruct",
+                "available": qwen_model is not None,
+                "base_url": ollama_url,
+                "model_size": qwen_model.get('size') if qwen_model else None
+            }
+        else:
+            return {
+                "status": "unhealthy",
+                "error": f"Ollama returned {response.status_code}",
+                "base_url": ollama_url
+            }
+            
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "base_url": os.getenv("OLLAMA_BASE_URL", "http://172.17.0.1:11434")
+        }

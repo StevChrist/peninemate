@@ -28,9 +28,9 @@ def get_conn():
     
     # Priority 2: Use individual env vars (fallback for local dev)
     return psycopg2.connect(
-        host=os.getenv("DB_HOST", "postgres"),      # ✅ Fixed default
-        port=int(os.getenv("DB_PORT", "5432")),     # ✅ Fixed default
+        host=os.getenv("DB_HOST", "postgres"),
+        port=int(os.getenv("DB_PORT", "5432")),
         dbname=os.getenv("DB_NAME", "peninemate_db"),
-        user=os.getenv("DB_USER", "peninemate_user"),  # ✅ Fixed default
-        password=os.getenv("DB_PASSWORD", "peninemate_pass_2026"),  # ✅ Fixed default
+        user=os.getenv("DB_USER", "peninemate_user"), 
+        password=os.getenv("DB_PASSWORD", "peninemate_pass_2026"),
     )

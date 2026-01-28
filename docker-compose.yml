@@ -35,6 +35,8 @@ services:
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-peninemate}
       - OLLAMA_BASE_URL=http://172.17.0.1:11434
+    volumes:
+      - ./backend/peninemate/core_logic/data:/app/peninemate/core_logic/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +59,7 @@ services:
     ports:
       - "3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - http://100.118.33.12:8000/api/v1/health
     depends_on:
       - backend
     networks:

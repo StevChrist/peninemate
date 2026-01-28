@@ -165,4 +165,6 @@ site/
 
 # ====================== other
 struktur_project.txt
-peninemate_plain_dump.sql
+peninemate_plain_dump.sql.env
+.env.local
+frontend/.env.local

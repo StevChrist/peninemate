@@ -31,7 +31,7 @@ export default function RecommendationPage() {
     setIsLoading(true);
     
     try {
-      const response = await fetch("http://localhost:8000/api/v1/recommend", {
+      const response = await fetch("http://100.118.33.12:8000/api/v1/recommend", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

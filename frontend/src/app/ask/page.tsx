@@ -15,7 +15,7 @@ function AskBotPageContent() {
   const initialQueryProcessed = useRef(false);
 
   // ✅ Dynamic API URL - auto-detect environment
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://100.118.33.12:8000";
 
   // ✅ FIX: Wrap with useCallback to satisfy useEffect dependency
   const handleSendMessage = useCallback(

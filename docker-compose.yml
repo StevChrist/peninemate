@@ -1,13 +1,12 @@
-version: '3.8'
 
 services:
   postgres:
     image: postgres:15-alpine
     container_name: peninemate_postgres
     environment:
-      POSTGRES_DB: ${DB_NAME:-peninematedb}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-peninemate}
+      POSTGRES_DB: peninematedb
+      POSTGRES_USER: peninemate_user
+      POSTGRES_PASSWORD: peninemate_pass_2026
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -29,12 +28,14 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - DATABASE_URL=postgresql://peninemate_user:peninemate_pass_2026@postgres:5432/peninemate_db
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_NAME=${DB_NAME:-peninematedb}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-peninemate}
+      - DB_NAME=peninemate_db
+      - DB_USER=peninemate_user
+      - DB_PASSWORD=peninenemate_pass_2026
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - TMDB_API_KEY=7a2f8c4d1f20c491b2d6e60f435f11bf
     volumes:
       - ./backend:/app
     depends_on:

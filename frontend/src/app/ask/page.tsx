@@ -136,7 +136,7 @@ function AskBotPageContent() {
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         </div>
 
-        {/* Debug Info (remove in production) */}
+        {/* Debug Info (remove in production)
         {process.env.NODE_ENV === "development" && (
           <div className="mt-4 p-4 bg-gray-800 rounded text-xs text-gray-400 max-w-4xl w-full mx-auto">
             <strong>Debug Info:</strong>
@@ -144,7 +144,7 @@ function AskBotPageContent() {
             <div>Messages: {messages.length}</div>
             <div>Loading: {isLoading ? "Yes" : "No"}</div>
           </div>
-        )}
+        )} */}
       </main>
     </div>
   );

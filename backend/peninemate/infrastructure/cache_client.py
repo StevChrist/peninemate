@@ -99,7 +99,7 @@ class SimpleCache:
             'maxsize': self.maxsize,
             'hits': self.hits,
             'misses': self.misses,
-            'hit_rate': f"{hit_rate:.2f}%"
+            'hit_rate': hit_rate
         }
 
 

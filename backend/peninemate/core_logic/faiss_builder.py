@@ -135,7 +135,7 @@ def build_faiss_index():
     embeddings = model.encode(
         documents,
         show_progress_bar=True,
-        batch_size=32,
+        batch_size=16,
         convert_to_numpy=True
     )
     

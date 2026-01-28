@@ -463,7 +463,7 @@ async def llm_status():
         import os
         import requests
         
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://172.17.0.1:11434")
+        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
         
         response = requests.get(
             f"{ollama_url}/api/tags",

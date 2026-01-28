@@ -14,14 +14,19 @@ logger = logging.getLogger(__name__)
 class QwenClient:
     """Client for Qwen 2.5 3B Instruct model via Ollama"""
     
-    def __init__(self, base_url: str = None):
+    def __init__(self, base_url: Optional[str] = None):
         import os
-        # Priority: parameter > env var > Docker bridge IP
-        self.base_url = base_url or os.getenv(
-            "OLLAMA_BASE_URL", 
-            "http://172.17.0.1:11434"  # Default for Docker
+
+        self.base_url = (
+            base_url
+            or os.getenv("OLLAMA_BASE_URL")
+            or "http://host.docker.internal:11434"
         )
+
         self.model = "qwen2.5:3b-instruct"
+
+        # Optional: auto-check model saat startup
+        self._check_model()
     
     def _check_model(self):
         """Check if model is available"""

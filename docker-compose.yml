@@ -34,7 +34,7 @@ services:
       - DB_NAME=${DB_NAME:-peninematedb}
       - DB_USER=${DB_USER:-postgres}
       - DB_PASSWORD=${DB_PASSWORD:-peninemate}
-      - OLLAMA_BASE_URL=http://172.18.0.1:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
     volumes:
       - ./backend/peninemate/core_logic/data:/app/peninemate/core_logic/data
     depends_on:
@@ -43,7 +43,7 @@ services:
     networks:
       - peninemate_network
     extra_hosts:
-      - "host.docker.internal:172.17.0.1"
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s

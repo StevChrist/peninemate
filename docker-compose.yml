@@ -36,7 +36,7 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-peninemate}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
     volumes:
-      - ./backend/peninemate/core_logic/data:/app/peninemate/core_logic/data
+      - ./backend:/app
     depends_on:
       postgres:
         condition: service_healthy
@@ -53,7 +53,7 @@ services:
 
   frontend:
     build:
-      context: ./peninemate-frontend
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: peninemate_frontend
     ports:

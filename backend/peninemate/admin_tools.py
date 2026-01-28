@@ -13,7 +13,6 @@ current_dir = Path(__file__).parent
 sys.path.insert(0, str(current_dir))
 
 from infrastructure.db_client import get_conn
-from data_import.csv_importer import import_movies
 from core_logic.faiss_builder import build_faiss_index
 import json
 

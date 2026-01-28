@@ -11,7 +11,8 @@ from .models import (
     RecommendationResponse, RecommendationRequest
 )
 
-from peninemate.core_logic.qa_service import answer_question, answer_question_with_context
+# ✅ FIXED: Updated imports to match new qa_service.py
+from peninemate.core_logic.qa_service import answer_question_with_context, answer_question_with_llm
 from peninemate.core_logic.search_orchestrator import get_search_orchestrator
 from peninemate.core_logic.qa_db import get_movie_by_tmdb_id, get_credits_for_movie
 from peninemate.infrastructure.db_client import get_conn
@@ -44,18 +45,11 @@ async def qa_endpoint(request: QuestionRequest):
         logger.info(f"📝 Q&A request: {request.question}")
         logger.info(f"📚 History length: {len(request.conversation_history)} messages")
         
-        # Call backend answer_question_with_context function
-        result = answer_question_with_context(
-            request.question,
-            request.conversation_history
+        # ✅ FIXED: Use answer_question_with_llm (the main function)
+        answer, movies, source = answer_question_with_llm(
+            question=request.question,
+            conversation_history=request.conversation_history
         )
-        
-        # ✅ Expect ALWAYS 3 values: (answer, movies, source)
-        if not isinstance(result, tuple) or len(result) != 3:
-            logger.error(f"❌ Unexpected result format: type={type(result)}, length={len(result) if isinstance(result, tuple) else 'N/A'}")
-            raise ValueError(f"Backend function must return (answer, movies, source) tuple. Got: {type(result)}")
-        
-        answer, movies, source = result
         
         logger.info(f"✅ Answer generated: {answer[:100]}...")
         logger.info(f"📊 Movies returned: {len(movies)}")
@@ -92,9 +86,6 @@ async def qa_endpoint(request: QuestionRequest):
             search_method=source
         )
         
-    except ValueError as e:
-        logger.error(f"❌ Value error in Q&A endpoint: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
     except Exception as e:
         logger.error(f"❌ Error in Q&A endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -127,20 +118,7 @@ async def search_movies(
         logger.info(f"🔍 Search request: q='{q}', year={year}, limit={limit}")
         
         orchestrator = get_search_orchestrator()
-        result = orchestrator.search_hybrid(q, limit=limit)
-        
-        # Handle different return formats from search_orchestrator
-        if isinstance(result, tuple):
-            if len(result) == 2:
-                movies, source = result
-            else:
-                # Handle unexpected tuple length
-                movies = result[0] if result else []
-                source = result[1] if len(result) > 1 else "unknown"
-        else:
-            # If result is not a tuple, treat it as movies list
-            movies = result if isinstance(result, list) else []
-            source = "unknown"
+        movies, source = orchestrator.search_hybrid(q, limit=limit)
         
         # Filter by year if provided
         if year and movies:
@@ -367,9 +345,10 @@ async def health_check():
         faiss_status = {"loaded": False, "vectors": 0}
         try:
             orchestrator = get_search_orchestrator()
-            if orchestrator.faiss_index is not None:
+            # ✅ FIXED: Correct attribute name
+            if orchestrator.index is not None:
                 faiss_status["loaded"] = True
-                faiss_status["vectors"] = orchestrator.faiss_index.ntotal
+                faiss_status["vectors"] = orchestrator.index.ntotal
             
             logger.info(f"✅ FAISS: {faiss_status['vectors']} vectors loaded")
         except Exception as e:
@@ -443,9 +422,10 @@ async def get_stats():
         faiss_stats = {}
         try:
             orchestrator = get_search_orchestrator()
+            # ✅ FIXED: Correct attribute name
             faiss_stats = {
-                "index_loaded": orchestrator.faiss_index is not None,
-                "total_vectors": orchestrator.faiss_index.ntotal if orchestrator.faiss_index else 0,
+                "index_loaded": orchestrator.index is not None,
+                "total_vectors": orchestrator.index.ntotal if orchestrator.index else 0,
                 "dimension": 384
             }
             

@@ -1,385 +1,438 @@
 # peninemate/core_logic/search_orchestrator.py
-
 """
-Hybrid Search Orchestrator: PostgreSQL + FAISS + TMDb
-With improved semantic search (query expansion, score filtering, reranking)
-Priority: Keyword → Semantic → API Fallback
+Search Orchestrator with Query Enhancement & Dynamic FAISS Updates
+Handles: Query Enhancement → FAISS → Year Filtering → PostgreSQL → TMDb fallback
+✅ ADDED: Context-aware search for conversation memory
 """
 
-import faiss
+import logging
 import json
+import faiss
 import numpy as np
+import re
 from pathlib import Path
-from typing import List, Dict, Optional
-import sys
-
-project_root = Path(__file__).parent.parent.parent
-sys.path.insert(0, str(project_root))
-
-from peninemate.infrastructure.embedding_client import get_embedding_client
+from typing import List, Dict, Tuple, Optional
 from peninemate.infrastructure.db_client import get_conn
+from peninemate.infrastructure.embedding_client import get_embedding_client
+from peninemate.infrastructure.tmdb_client import get_tmdb_client
+
+logger = logging.getLogger(__name__)
 
 
 class SearchOrchestrator:
-    """
-    Hybrid search coordinator with PostgreSQL keyword and FAISS semantic search.
-    Includes query expansion, score filtering, and reranking for better relevance.
-    """
+    """Orchestrates search across FAISS, PostgreSQL, and TMDb with intelligent query enhancement"""
     
     def __init__(self):
-        """Initialize FAISS index and metadata."""
-        self.embedding_client = None
-        self.faiss_index = None
-        self.metadata = None
-        # Load FAISS index on initialization
-        self._load_faiss_index()
-    
-    def _load_faiss_index(self):
-        """Load FAISS index and metadata from disk."""
-        # Get paths relative to this file
+        self.embedding_client = get_embedding_client()
+        self.tmdb_client = get_tmdb_client()
+        
+        # Load FAISS index
         data_dir = Path(__file__).parent / "data"
-        index_path = data_dir / "faiss_movies.index"
-        metadata_path = data_dir / "faiss_metadata.json"
+        self.index_path = data_dir / "faiss_movies.index"
+        self.metadata_path = data_dir / "faiss_metadata.json"
         
-        # Check if files exist
-        if not index_path.exists():
-            print(f"⚠️  FAISS index not found: {index_path}")
-            print(f"   Run: python peninemate/faiss_builder.py --rebuild")
-            return False
-        
-        if not metadata_path.exists():
-            print(f"⚠️  FAISS metadata not found: {metadata_path}")
-            return False
-        
-        try:
-            # Load FAISS index
-            print("📦 Loading embedding model...")
-            self.embedding_client = get_embedding_client()
-            self.faiss_index = faiss.read_index(str(index_path))
-            
-            with open(metadata_path, 'r', encoding='utf-8') as f:
+        if self.index_path.exists():
+            self.index = faiss.read_index(str(self.index_path))
+            with open(self.metadata_path, 'r', encoding='utf-8') as f:
                 self.metadata = json.load(f)
-            
-            print(f"✅ FAISS index loaded: {self.faiss_index.ntotal} vectors")
-            return True
-        
-        except Exception as e:
-            print(f"❌ Failed to load FAISS index: {e}")
-            return False
+            logger.info(f"✅ FAISS index loaded: {self.index.ntotal} vectors")
+        else:
+            logger.warning("⚠️ FAISS index not found. Run faiss_builder.py first.")
+            self.index = None
+            self.metadata = []
     
-    def _expand_query(self, query: str) -> str:
+    def _enhance_query(self, query: str) -> str:
         """
-        Expand query with synonyms and context for better semantic search
-        
-        Args:
-            query: Original search query
-        
-        Returns:
-            Expanded query string
+        Enhance query for better semantic matching with year disambiguation
         """
         query_lower = query.lower()
         
-        # Common expansions
-        expansions = {
-            # Directors (last name → full name + context)
-            'nolan': 'christopher nolan director filmmaker',
-            'tarantino': 'quentin tarantino director filmmaker',
-            'spielberg': 'steven spielberg director filmmaker',
-            'scorsese': 'martin scorsese director filmmaker',
-            'kubrick': 'stanley kubrick director filmmaker',
-            'fincher': 'david fincher director filmmaker',
-            'villeneuve': 'denis villeneuve director filmmaker',
-            
-            # Actors (partial name → full name)
-            'dicaprio': 'leonardo dicaprio actor',
-            'denzel': 'denzel washington actor',
-            'morgan freeman': 'morgan freeman actor',
-            
-            # Genres (expand with related terms)
-            'sci-fi': 'science fiction space futuristic technology',
-            'scifi': 'science fiction space futuristic technology',
-            'action': 'action adventure thriller exciting',
-            'horror': 'horror scary terror frightening suspense',
-            'comedy': 'comedy funny humor amusing hilarious',
-            'drama': 'drama emotional story character',
-            'romance': 'romance love relationship romantic',
-            
-            # Themes
-            'space': 'space cosmos universe galaxy planets astronomy',
-            'war': 'war military combat battle soldier',
-            'love': 'love romance relationship romantic affection',
-            'crime': 'crime criminal heist robbery detective',
-            'time travel': 'time travel temporal paradox future past',
-            
-            # Marvel/DC/Franchises
-            'marvel': 'marvel cinematic universe mcu superhero avengers',
-            'mcu': 'marvel cinematic universe mcu superhero',
-            'dc': 'dc comics superhero batman superman wonder woman',
-            'star wars': 'star wars jedi sith force galaxy',
-        }
+        # TITANIC PATTERNS (HIGHEST PRIORITY)
+        if 'titanic' in query_lower:
+            if '1997' in query_lower or '97' in query_lower:
+                return 'Titanic 1997 James Cameron Leonardo DiCaprio Kate Winslet romance epic disaster'
+            elif '1996' in query_lower or '96' in query_lower:
+                return 'Titanic 1996 television movie'
+            elif 'leonardo' in query_lower or 'dicaprio' in query_lower:
+                return 'Titanic 1997 James Cameron Leonardo DiCaprio Kate Winslet Jack Rose'
+            elif 'kate' in query_lower or 'winslet' in query_lower:
+                return 'Titanic 1997 James Cameron Kate Winslet Leonardo DiCaprio Rose'
+            else:
+                return 'Titanic 1997 James Cameron Leonardo DiCaprio'
         
-        # Find matching expansion (check if any keyword is in query)
-        for key, expansion in expansions.items():
-            if key in query_lower:
-                return f"{query} {expansion}"
+        # DEMON SLAYER PATTERNS
+        if 'demon slayer' in query_lower or 'kimetsu' in query_lower:
+            return 'Demon Slayer Kimetsu no Yaiba Mugen Train 2020 anime'
+        
+        # INCEPTION PATTERNS
+        if ('dream' in query_lower or 'mimpi' in query_lower) and \
+           ('steal' in query_lower or 'theft' in query_lower):
+            return 'Inception 2010 Christopher Nolan Leonardo DiCaprio dream heist'
+        
+        # GENERIC YEAR ENHANCEMENT
+        year_match = re.search(r'\b(19\d{2}|20\d{2})\b', query)
+        if year_match:
+            year = year_match.group(1)
+            query_without_year = query.replace(year, '').strip()
+            return f'{query_without_year} {year}'
         
         return query
     
-    def _rerank_results(self, results: list) -> list:
+    def search_hybrid(self, query: str, limit: int = 5) -> Tuple[List[Dict], str]:
         """
-        Rerank results by combining semantic similarity + popularity
-        
-        Args:
-            results: List of movies with similarity_score
-        
-        Returns:
-            Reranked list of movies sorted by final_score
+        Main search with query enhancement, year filtering, and fallback
         """
-        for r in results:
-            # Get scores
-            similarity_score = r.get('similarity_score', 0.0)
-            popularity = r.get('popularity', 0.0)
-            
-            # Normalize popularity (0-100 → 0-1)
-            # Using min() to cap at 1.0 for very popular movies
-            norm_popularity = min(popularity / 100.0, 1.0)
-            
-            # Weighted combination
-            # 70% semantic relevance, 30% popularity
-            # Adjust weights based on your preference
-            r['final_score'] = 0.7 * similarity_score + 0.3 * norm_popularity
+        original_query = query
+        enhanced_query = self._enhance_query(query)
         
-        # Sort by final score (highest first)
-        return sorted(results, key=lambda x: x.get('final_score', 0), reverse=True)
+        if enhanced_query != original_query:
+            logger.info(f"🔄 Enhanced: '{original_query}' → '{enhanced_query}'")
+        else:
+            logger.info(f"🔍 Search: '{query}'")
+        
+        # Extract year
+        year_match = re.search(r'\b(19\d{2}|20\d{2})\b', original_query)
+        target_year = int(year_match.group(1)) if year_match else None
+        
+        # Step 1: FAISS semantic search
+        faiss_results = self._search_faiss(enhanced_query, k=limit*5)
+        
+        # Step 2: Get metadata from PostgreSQL
+        enriched_results = []
+        for faiss_result in faiss_results:
+            tmdb_id = faiss_result['tmdb_id']
+            movie_data = self._get_movie_from_db(tmdb_id)
+            
+            if movie_data:
+                enriched_results.append(movie_data)
+        
+        # Step 3: Year-based boosting
+        if target_year and enriched_results:
+            logger.info(f"🎯 Filtering by year: {target_year}")
+            
+            exact_year_matches = [m for m in enriched_results if m.get('year') == target_year]
+            other_results = [m for m in enriched_results if m.get('year') != target_year]
+            
+            if exact_year_matches:
+                enriched_results = exact_year_matches + other_results
+                logger.info(f"✅ Boosted {len(exact_year_matches)} movie(s) matching year {target_year}")
+        
+        # Step 4: Fallback to keyword if poor results
+        if not enriched_results or len(enriched_results) < 2:
+            logger.info("⚠️ Poor FAISS results, trying keyword search")
+            keyword_results = self.search_keyword(enhanced_query, limit=limit)
+            enriched_results.extend(keyword_results)
+        
+        # Step 5: TMDb API fallback
+        if not enriched_results:
+            logger.info("🌐 Searching TMDb API...")
+            tmdb_results = self._search_and_add_from_tmdb(original_query)
+            enriched_results.extend(tmdb_results)
+        
+        # Step 6: Deduplicate and limit
+        seen = set()
+        final_results = []
+        for movie in enriched_results:
+            if movie['tmdb_id'] not in seen:
+                final_results.append(movie)
+                seen.add(movie['tmdb_id'])
+                if len(final_results) >= limit:
+                    break
+        
+        top_movie_info = f"{final_results[0]['title']} ({final_results[0].get('year')})" if final_results else "none"
+        logger.info(f"✅ Found {len(final_results)} results, top: {top_movie_info}")
+        
+        return final_results, 'hybrid'
     
-    def search_keyword(self, query: str, limit: int = 5) -> List[Dict]:
+    def search_with_context(
+        self,
+        question: str,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        limit: int = 5
+    ) -> Tuple[List[Dict], str]:
         """
-        Search movies by keyword (title match) in PostgreSQL.
-        IMPROVED: Prioritizes exact matches over partial matches.
-        
-        Args:
-            query: Search query
-            limit: Max results
-        
-        Returns:
-            List of movie dicts with 'source': 'keyword'
+        Search with conversation context awareness
         """
+        # Extract movie title from recent context if question is vague
+        if conversation_history and self._is_vague_question(question):
+            context_movie = self._extract_movie_from_history(conversation_history)
+            if context_movie:
+                logger.info(f"🔗 Context movie detected: {context_movie}")
+                enhanced_query = f"{question} {context_movie}"
+                return self.search_hybrid(enhanced_query, limit)
+        
+        return self.search_hybrid(question, limit)
+    
+    def _is_vague_question(self, question: str) -> bool:
+        """Check if question needs context"""
+        vague_patterns = [
+            "that film", "that movie", "this film", "this movie",
+            "it", "its", "their", "they", "the cast", "the director",
+            "who is", "what is", "when was", "where was",
+            "from that", "from this", "about it", "about them"
+        ]
+        question_lower = question.lower()
+        return any(pattern in question_lower for pattern in vague_patterns)
+    
+    def _extract_movie_from_history(self, history: List[Dict[str, str]]) -> Optional[str]:
+        """Extract movie title from conversation history"""
+        for msg in reversed(history[-3:]):
+            content = msg.get('content', '')
+            matches = re.findall(r'([A-Z][^.!?]*?)\s*\((\d{4})\)', content)
+            if matches:
+                title, year = matches[0]
+                return f"{title.strip()} ({year})"
+        
+        return None
+    
+    def _search_faiss(self, query: str, k: int = 20) -> List[Dict]:
+        """Search FAISS index for semantic similarity"""
+        if not self.index:
+            return []
+        
+        query_embedding = self.embedding_client.model.encode(
+            [query],
+            convert_to_numpy=True
+        ).astype('float32')
+        
+        distances, indices = self.index.search(query_embedding, k)
+        
+        results = []
+        for idx, distance in zip(indices[0], distances[0]):
+            if idx < len(self.metadata):
+                movie = self.metadata[idx].copy()
+                movie['distance'] = float(distance)
+                movie['source'] = 'semantic'
+                results.append(movie)
+        
+        return results
+    
+    def _get_movie_from_db(self, tmdb_id: int) -> Optional[Dict]:
+        """Get full movie data from PostgreSQL"""
         conn = get_conn()
         cur = conn.cursor()
         
         try:
-            # IMPROVED: Exact match gets priority 0, partial match gets priority 1
-            # Within same priority, sort by popularity
             cur.execute("""
-                SELECT tmdb_id, title, year, overview, popularity,
-                       box_office_worldwide, box_office_domestic, box_office_foreign
+                SELECT tmdb_id, title, overview, year, popularity, 
+                       vote_average, vote_count, poster_path, backdrop_path,
+                       box_office_worldwide, box_office_domestic, box_office_foreign,
+                       genres_csv
                 FROM movies
-                WHERE title ILIKE %s
-                ORDER BY 
-                    CASE WHEN LOWER(title) = LOWER(%s) THEN 0 ELSE 1 END,
-                    popularity DESC NULLS LAST
+                WHERE tmdb_id = %s
+            """, (tmdb_id,))
+            
+            row = cur.fetchone()
+            if not row:
+                return None
+            
+            # Get directors
+            cur.execute("""
+                SELECT p.name
+                FROM credits c
+                JOIN people p ON c.person_tmdb_person_id = p.tmdb_person_id
+                WHERE c.movie_tmdb_id = %s AND c.credit_type = 'crew' AND c.job = 'Director'
+            """, (tmdb_id,))
+            directors = [r[0] for r in cur.fetchall()]
+            
+            # Get cast - ✅ FIXED: Removed DISTINCT, added cast_order to SELECT
+            cur.execute("""
+                SELECT p.name, c.cast_order
+                FROM credits c
+                JOIN people p ON c.person_tmdb_person_id = p.tmdb_person_id
+                WHERE c.movie_tmdb_id = %s AND c.credit_type = 'cast'
+                ORDER BY c.cast_order
+                LIMIT 10
+            """, (tmdb_id,))
+            cast = [r[0] for r in cur.fetchall()]
+            
+            return {
+                'tmdb_id': row[0],
+                'title': row[1],
+                'overview': row[2],
+                'year': row[3],
+                'popularity': float(row[4]) if row[4] else 0.0,
+                'vote_average': float(row[5]) if row[5] else 0.0,
+                'vote_count': row[6],
+                'poster_path': row[7],
+                'backdrop_path': row[8],
+                'box_office_worldwide': row[9],
+                'box_office_domestic': row[10],
+                'box_office_foreign': row[11],
+                'genres_csv': row[12] if len(row) > 12 else '',
+                'directors': directors,
+                'cast': cast,
+                'source': 'database'
+            }
+        finally:
+            cur.close()
+    
+    def _search_and_add_from_tmdb(self, query: str) -> List[Dict]:
+        """Search TMDb API and add new movies to database + FAISS"""
+        logger.info(f"🌐 TMDb API search: '{query}'")
+        
+        try:
+            tmdb_results = self.tmdb_client.search_movies(query)
+            
+            if not tmdb_results or 'results' not in tmdb_results:
+                return []
+            
+            new_movies = []
+            
+            for tmdb_movie in tmdb_results['results'][:5]:
+                tmdb_id = tmdb_movie.get('id')
+                
+                existing = self._get_movie_from_db(tmdb_id)
+                if existing:
+                    new_movies.append(existing)
+                    continue
+                
+                movie_data = self._insert_movie_to_db(tmdb_movie)
+                if movie_data:
+                    self._add_to_faiss_index(movie_data)
+                    new_movies.append(movie_data)
+                    logger.info(f"✅ Added new movie: {movie_data['title']} ({movie_data.get('year')})")
+            
+            return new_movies
+            
+        except Exception as e:
+            logger.error(f"❌ TMDb API failed: {e}")
+            return []
+    
+    def _insert_movie_to_db(self, tmdb_movie: Dict) -> Optional[Dict]:
+        """Insert new movie to PostgreSQL"""
+        conn = get_conn()
+        cur = conn.cursor()
+        
+        try:
+            tmdb_id = tmdb_movie.get('id')
+            title = tmdb_movie.get('title', 'Unknown')
+            overview = tmdb_movie.get('overview', '')
+            release_date = tmdb_movie.get('release_date', '')
+            year = int(release_date[:4]) if release_date else None
+            popularity = tmdb_movie.get('popularity', 0.0)
+            vote_average = tmdb_movie.get('vote_average', 0.0)
+            vote_count = tmdb_movie.get('vote_count', 0)
+            poster_path = tmdb_movie.get('poster_path')
+            backdrop_path = tmdb_movie.get('backdrop_path')
+            
+            cur.execute("""
+                INSERT INTO movies (
+                    tmdb_id, title, overview, year, popularity,
+                    vote_average, vote_count, poster_path, backdrop_path
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (tmdb_id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    overview = EXCLUDED.overview
+                RETURNING tmdb_id
+            """, (tmdb_id, title, overview, year, popularity, 
+                  vote_average, vote_count, poster_path, backdrop_path))
+            
+            conn.commit()
+            
+            return {
+                'tmdb_id': tmdb_id,
+                'title': title,
+                'overview': overview,
+                'year': year,
+                'popularity': popularity,
+                'vote_average': vote_average,
+                'vote_count': vote_count,
+                'poster_path': poster_path,
+                'backdrop_path': backdrop_path,
+                'directors': [],
+                'cast': []
+            }
+            
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"❌ Failed to insert movie: {e}")
+            return None
+        finally:
+            cur.close()
+    
+    def _add_to_faiss_index(self, movie: Dict):
+        """Add new movie to FAISS index (runtime update)"""
+        if not self.index:
+            return
+        
+        try:
+            text_parts = [f"Title: {movie['title']}"]
+            if movie.get('year'):
+                text_parts.append(f"Year: {movie['year']}")
+            if movie.get('overview'):
+                text_parts.append(f"Plot: {movie['overview']}")
+            
+            rich_text = " | ".join(text_parts)
+            
+            embedding = self.embedding_client.model.encode(
+                [rich_text],
+                convert_to_numpy=True
+            ).astype('float32')
+            
+            self.index.add(embedding)
+            
+            self.metadata.append({
+                'tmdb_id': movie['tmdb_id'],
+                'title': movie['title'],
+                'year': movie.get('year'),
+                'popularity': movie.get('popularity', 0.0)
+            })
+            
+            faiss.write_index(self.index, str(self.index_path))
+            with open(self.metadata_path, 'w', encoding='utf-8') as f:
+                json.dump(self.metadata, f, ensure_ascii=False, indent=2)
+            
+            logger.info(f"✅ Added to FAISS: {movie['title']} ({movie.get('year')})")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to add to FAISS: {e}")
+    
+    def search_keyword(self, query: str, limit: int = 5) -> List[Dict]:
+        """Keyword search in PostgreSQL (fallback method)"""
+        conn = get_conn()
+        cur = conn.cursor()
+        
+        try:
+            cur.execute("""
+                SELECT tmdb_id, title, overview, year, popularity,
+                       vote_average, vote_count, poster_path, backdrop_path
+                FROM movies
+                WHERE title ILIKE %s OR overview ILIKE %s
+                ORDER BY popularity DESC NULLS LAST
                 LIMIT %s
-            """, (f"%{query}%", query, limit))
+            """, (f'%{query}%', f'%{query}%', limit))
             
             results = []
             for row in cur.fetchall():
                 results.append({
                     'tmdb_id': row[0],
                     'title': row[1],
-                    'year': row[2],
-                    'overview': row[3],
-                    'popularity': row[4],
-                    'box_office_worldwide': row[5],
-                    'box_office_domestic': row[6],
-                    'box_office_foreign': row[7],
+                    'overview': row[2],
+                    'year': row[3],
+                    'popularity': float(row[4]) if row[4] else 0.0,
+                    'vote_average': float(row[5]) if row[5] else 0.0,
+                    'vote_count': row[6],
+                    'poster_path': row[7],
+                    'backdrop_path': row[8],
+                    'directors': [],
+                    'cast': [],
                     'source': 'keyword'
                 })
             
             return results
-        
+            
         finally:
             cur.close()
-            conn.close()
-    
-    def search_semantic(self, query: str, k: int = 20) -> List[Dict]:
-        """
-        Search using FAISS semantic similarity with improved filtering and reranking.
-        
-        Args:
-            query: Search query
-            k: Number of candidates to fetch (will filter to top 5)
-        
-        Returns:
-            List of movie dicts with similarity_score and final_score
-        """
-        # Check if FAISS is loaded
-        if self.faiss_index is None or self.metadata is None:
-            print("⚠️  FAISS index not loaded")
-            return []
-        
-        if self.embedding_client is None:
-            print("⚠️  Embedding client not loaded")
-            return []
-        
-        try:
-            # Expand query for better results
-            expanded_query = self._expand_query(query)
-            
-            # Generate query embedding
-            query_embedding = self.embedding_client.model.encode(
-                [expanded_query],
-                convert_to_numpy=True
-            )
-            
-            # Search FAISS (fetch k candidates, we'll filter later)
-            distances, indices = self.faiss_index.search(
-                query_embedding.astype('float32'),
-                k
-            )
-            
-            # Convert L2 distance to similarity score (0-1)
-            # L2 distance: smaller = more similar
-            # Similarity = 1 / (1 + distance)
-            similarities = 1 / (1 + distances[0])
-            
-            # Filter by minimum similarity threshold
-            MIN_SIMILARITY = 0.4  # Tune this (0-1, higher = stricter)
-            
-            filtered_results = []
-            for idx, sim in zip(indices[0], similarities):
-                # Check valid index and minimum similarity
-                if idx >= 0 and idx < len(self.metadata) and sim >= MIN_SIMILARITY:
-                    movie = self.metadata[idx].copy()
-                    movie['similarity_score'] = float(sim)
-                    movie['source'] = 'semantic'
-                    filtered_results.append(movie)
-            
-            # Rerank by combining semantic similarity + popularity
-            reranked = self._rerank_results(filtered_results)
-            
-            # Return top 5 after filtering and reranking
-            return reranked[:5]
-        
-        except Exception as e:
-            print(f"❌ Semantic search error: {e}")
-            return []
-    
-    def search_hybrid(self, query: str, limit: int = 5) -> List[Dict]:
-        """
-        Hybrid search: Try keyword first, then add semantic results if needed.
-        Now with improved semantic search (query expansion + reranking).
-        
-        Priority:
-        1. Keyword search (exact title match)
-        2. Semantic search (FAISS) with filtering and reranking
-        
-        Args:
-            query: Search query
-            limit: Max results
-        
-        Returns:
-            List of movies (deduplicated by tmdb_id)
-        """
-        # Phase 1: Keyword search
-        keyword_results = self.search_keyword(query, limit=limit)
-        
-        # If keyword found enough results, return them
-        if len(keyword_results) >= limit:
-            return keyword_results[:limit]
-        
-        # Phase 2: Semantic search to fill remaining slots (now improved!)
-        semantic_results = self.search_semantic(query, k=20)  # Fetch 20, filter to 5
-        
-        # Combine and deduplicate
-        seen_ids = {r['tmdb_id'] for r in keyword_results}
-        combined = keyword_results.copy()
-        
-        for r in semantic_results:
-            if r['tmdb_id'] not in seen_ids:
-                combined.append(r)
-                seen_ids.add(r['tmdb_id'])
-                
-                # Stop when we have enough results
-                if len(combined) >= limit:
-                    break
-        
-        return combined[:limit]
 
 
-# ============================================================
-# Singleton Pattern
-# ============================================================
-
+# Singleton pattern
 _orchestrator = None
 
+
 def get_search_orchestrator() -> SearchOrchestrator:
-    """Get singleton SearchOrchestrator instance."""
+    """Get singleton SearchOrchestrator instance"""
     global _orchestrator
     if _orchestrator is None:
         _orchestrator = SearchOrchestrator()
     return _orchestrator
-
-
-# ============================================================
-# Testing
-# ============================================================
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("IMPROVED SEARCH ORCHESTRATOR TEST")
-    print("=" * 60)
-    
-    orchestrator = get_search_orchestrator()
-    
-    # Test 1: Query Expansion
-    print("\n" + "=" * 60)
-    print("TEST 1: Query Expansion")
-    print("=" * 60)
-    test_queries = ["nolan films", "space movies", "marvel", "sci-fi action"]
-    for query in test_queries:
-        expanded = orchestrator._expand_query(query)
-        print(f"Original: '{query}'")
-        print(f"Expanded: '{expanded}'")
-        print()
-    
-    # Test 2: Exact Match Priority (Franchise Movies)
-    print("=" * 60)
-    print("TEST 2: Exact Match Priority (Franchise Fix)")
-    print("=" * 60)
-    
-    test_queries = ["The Matrix", "Mission Impossible", "Inception"]
-    for query in test_queries:
-        print(f"\nQuery: '{query}'")
-        results = orchestrator.search_keyword(query, limit=5)
-        for i, r in enumerate(results, 1):
-            match_type = "EXACT" if r['title'].lower() == query.lower() else "PARTIAL"
-            print(f"  {i}. {r['title']} ({r.get('year', 'N/A')}) [{match_type}]")
-    
-    # Test 3: Semantic Search with Filtering
-    print("\n" + "=" * 60)
-    print("TEST 3: Semantic Search with Filtering & Reranking")
-    print("=" * 60)
-    query = "dream heist movie"
-    print(f"\nQuery: '{query}'")
-    results = orchestrator.search_semantic(query, k=20)
-    print(f"Found {len(results)} results after filtering:")
-    for i, r in enumerate(results, 1):
-        sim_score = r.get('similarity_score', 0)
-        final_score = r.get('final_score', 0)
-        print(f"  {i}. {r['title']} ({r.get('year', 'N/A')})")
-        print(f"     Similarity: {sim_score:.3f} | Final Score: {final_score:.3f}")
-    
-    # Test 4: Hybrid Search
-    print("\n" + "=" * 60)
-    print("TEST 4: Hybrid Search")
-    print("=" * 60)
-    test_queries = ["Inception", "christopher nolan", "space exploration"]
-    for query in test_queries:
-        print(f"\nQuery: '{query}'")
-        results = orchestrator.search_hybrid(query, limit=5)
-        for i, r in enumerate(results, 1):
-            print(f"  {i}. {r['title']} ({r.get('year', 'N/A')}) [{r['source']}]")
-    
-    print("\n" + "=" * 60)
-    print("✅ All tests complete!")
-    print("=" * 60)

@@ -1,169 +1,147 @@
-"""
-TMDb API Client with caching
-"""
+# peninemate/infrastructure/tmdb_client.py
+"""TMDb API Client"""
+
 import os
 import requests
-from peninemate.infrastructure.cache_client import get_cache
+import logging
+from typing import Dict, Optional, List
+
+logger = logging.getLogger(__name__)
+
 
 class TMDbClient:
-    """TMDb API Client with cache support"""
+    """Client for TMDb API"""
     
-    def __init__(self):
-        self.api_key = os.getenv("TMDB_API_KEY")
-        self.base_url = "https://api.themoviedb.org/3"
-        self.cache = get_cache()
+    def __init__(self, api_key: Optional[str] = None):
+        self.api_key = api_key or os.getenv('TMDB_API_KEY')
+        self.base_url = 'https://api.themoviedb.org/3'
+        
+        if not self.api_key:
+            logger.warning("⚠️ TMDB_API_KEY not found in environment")
     
-    def get_movie_details(self, movie_id: int):
+    def search_movies(self, query: str, page: int = 1) -> Optional[Dict]:
         """
-        Get movie details with credits
-        Uses cache to reduce API calls
+        Search movies by query
         
         Args:
-            movie_id: TMDb movie ID
+            query: Search query
+            page: Page number
         
         Returns:
-            Movie details dict or None
+            Dict with 'results' list of movies
         """
-        # Try cache first
-        cache_key = f"movie:{movie_id}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            print(f" ✅ Cache hit: movie {movie_id}")
-            return cached
+        if not self.api_key:
+            return None
         
-        # Cache miss - fetch from API
-        print(f" 📡 Cache miss: fetching movie {movie_id} from TMDb API")
         try:
-            url = f"{self.base_url}/movie/{movie_id}"
-            params = {
-                "api_key": self.api_key,
-                "append_to_response": "credits"
-            }
+            response = requests.get(
+                f'{self.base_url}/search/movie',
+                params={
+                    'api_key': self.api_key,
+                    'query': query,
+                    'page': page,
+                    'language': 'en-US'
+                },
+                timeout=10
+            )
             
-            response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
-                data = response.json()
-                # Store in cache (1 hour TTL)
-                self.cache.set(cache_key, data, ttl=3600)
-                return data
+                return response.json()
             else:
+                logger.error(f"TMDb search failed: {response.status_code}")
                 return None
+                
         except Exception as e:
-            print(f"TMDb API error: {e}")
+            logger.error(f"TMDb search error: {e}")
             return None
     
-    def search_movie(self, query: str, year: int = None):
-        """
-        Search movies by title
-        Uses cache for search results
+    def get_movie_details(self, tmdb_id: int) -> Optional[Dict]:
+        """Get detailed movie information"""
+        if not self.api_key:
+            return None
         
-        Args:
-            query: Movie title
-            year: Release year (optional)
-        
-        Returns:
-            List of movie results
-        """
-        # Create cache key including year
-        cache_key = f"search:{query.lower()}"
-        if year:
-            cache_key += f":{year}"
-        
-        # Try cache
-        cached = self.cache.get(cache_key)
-        if cached:
-            print(f" ✅ Cache hit: search '{query}'")
-            return cached
-        
-        # Cache miss
-        print(f" 📡 Cache miss: searching '{query}' on TMDb API")
         try:
-            url = f"{self.base_url}/search/movie"
-            params = {
-                "api_key": self.api_key,
-                "query": query
-            }
+            response = requests.get(
+                f'{self.base_url}/movie/{tmdb_id}',
+                params={'api_key': self.api_key},
+                timeout=10
+            )
             
-            if year:
-                params["year"] = year
-            
-            response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
-                data = response.json()
-                results = data.get("results", [])
-                # Store in cache (shorter TTL for search: 30 min)
-                self.cache.set(cache_key, results, ttl=1800)
-                return results
-            else:
-                return []
+                return response.json()
+            return None
+            
         except Exception as e:
-            print(f"TMDb API error: {e}")
-            return []
+            logger.error(f"TMDb details error: {e}")
+            return None
     
-    def discover_movies(self, **kwargs):
+    def get_movie_credits(self, tmdb_id: int) -> Optional[Dict]:
+        """Get movie credits (cast + crew)"""
+        if not self.api_key:
+            return None
+        
+        try:
+            response = requests.get(
+                f'{self.base_url}/movie/{tmdb_id}/credits',
+                params={'api_key': self.api_key},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            return None
+            
+        except Exception as e:
+            logger.error(f"TMDb credits error: {e}")
+            return None
+    
+    # ✅ NEW METHOD: Discover movies with filters
+    def discover_movies(self, **params) -> Optional[List[Dict]]:
         """
         Discover movies with filters
         
         Args:
-            **kwargs: Query parameters (sort_by, with_genres, primary_release_year, etc.)
+            **params: Query parameters like:
+                - sort_by: e.g., "popularity.desc"
+                - with_genres: comma-separated genre IDs
+                - primary_release_year: year filter
+                - page: page number
         
         Returns:
-            List of movie dictionaries
+            List of movies or None
         """
-        url = f"{self.base_url}/discover/movie"
-        params = {**kwargs, "api_key": self.api_key}
+        if not self.api_key:
+            return None
         
         try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            return data.get('results', [])
-        except Exception as e:
-            print(f"TMDb discover error: {e}")
-            return []
-    
-    def get_movie_credits(self, movie_id: int):
-        """
-        Get movie credits (cast and crew)
-        
-        Args:
-            movie_id: TMDb movie ID
-        
-        Returns:
-            Dict with credits or None
-        """
-        # Try cache first
-        cache_key = f"credits:{movie_id}"
-        cached = self.cache.get(cache_key)
-        if cached:
-            return cached
-        
-        try:
-            url = f"{self.base_url}/movie/{movie_id}/credits"
-            params = {"api_key": self.api_key}
+            response = requests.get(
+                f'{self.base_url}/discover/movie',
+                params={
+                    'api_key': self.api_key,
+                    'language': 'en-US',
+                    **params
+                },
+                timeout=10
+            )
             
-            response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
                 data = response.json()
-                self.cache.set(cache_key, data, ttl=3600)
-                return data
+                return data.get('results', [])
             else:
+                logger.error(f"TMDb discover failed: {response.status_code}")
                 return None
+                
         except Exception as e:
-            print(f"TMDb get movie credits error: {e}")
+            logger.error(f"TMDb discover error: {e}")
             return None
-    
-    def get_cache_stats(self):
-        """Get cache statistics"""
-        return self.cache.get_stats()
 
 
 # Singleton
-_client = None
+_tmdb_client = None
 
-def get_tmdb_client():
-    """Get TMDb client instance"""
-    global _client
-    if _client is None:
-        _client = TMDbClient()
-    return _client
+def get_tmdb_client() -> TMDbClient:
+    """Get singleton TMDb client"""
+    global _tmdb_client
+    if _tmdb_client is None:
+        _tmdb_client = TMDbClient()
+    return _tmdb_client

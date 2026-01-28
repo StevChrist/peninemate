@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Header from "@/components/layout/Header";
 import ChatContainer from "@/components/chat/ChatContainer";
@@ -17,80 +17,109 @@ function AskBotPageContent() {
   // ✅ Dynamic API URL - auto-detect environment
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+  // ✅ FIX: Wrap with useCallback to satisfy useEffect dependency
+  const handleSendMessage = useCallback(
+    async (content: string) => {
+      if (isLoading || !content.trim()) return;
+
+      // Add user message
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: "user",
+        content: content.trim(),
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
+      try {
+        // Build conversation history (last 10 messages)
+        const conversationHistory = [...messages, userMessage]
+          .slice(-10)
+          .map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          }));
+
+        console.log(`🔗 Calling API: ${API_URL}/api/v1/qa`);
+
+        // Call backend API
+        const response = await fetch(`${API_URL}/api/v1/qa`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            question: content.trim(),
+            conversation_history: conversationHistory,
+          }),
+        });
+
+        console.log(`✅ Response status: ${response.status}`);
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log("📦 Response data:", data);
+
+        // Extract answer
+        const aiMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content:
+            data.answer || data.message || "Sorry, I couldn't find an answer.",
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, aiMessage]);
+      } catch (error: unknown) {
+        console.error("❌ Error fetching answer:", error);
+
+        // ✅ Specific error messages
+        let errorMsg = "Sorry, there was an error processing your request.";
+
+        // ✅ Type guard for Error object
+        if (error instanceof Error) {
+          if (error.message.includes("Failed to fetch")) {
+            errorMsg =
+              "❌ Could not connect to server. Please check if the backend is running at " +
+              API_URL;
+          } else if (error.message.includes("500")) {
+            errorMsg =
+              "❌ Server error. The question might be too complex. Try rephrasing it.";
+          } else if (error.message.includes("404")) {
+            errorMsg = "❌ API endpoint not found. Check backend configuration.";
+          } else if (error.message.includes("timeout")) {
+            errorMsg = "❌ Request timeout. The server took too long to respond.";
+          }
+        }
+
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: errorMsg,
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [isLoading, messages, API_URL]
+  );
+
   useEffect(() => {
     const query = searchParams.get("q");
     if (query && !initialQueryProcessed.current) {
       initialQueryProcessed.current = true;
       handleSendMessage(query);
     }
-  }, [searchParams]);
+  }, [searchParams, handleSendMessage]);
 
-  const handleSendMessage = async (content: string) => {
-    if (isLoading || !content.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: content.trim(),
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      const conversationHistory = [...messages, userMessage].slice(-10).map(msg => ({
-        role: msg.role,
-        content: msg.content
-      }));
-
-      console.log(`🔗 Calling API: ${API_URL}/api/v1/qa`); // ✅ Debug log
-
-      // ✅ Use dynamic API_URL
-      const response = await fetch(`${API_URL}/api/v1/qa`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          question: content.trim(),
-          conversation_history: conversationHistory
-        }),
-      });
-
-      console.log(`✅ Response status: ${response.status}`); // ✅ Debug log
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log("📦 Response data:", data); // ✅ Debug log
-
-      const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: data.answer || "Sorry, I couldn't find an answer.",
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-
-    } catch (error) {
-      console.error("❌ Error fetching answer:", error); // ✅ Better error log
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "Sorry, there was an error processing your request. Please try again.",
-        timestamp: new Date(),
-      };
-
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-  
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header />
@@ -104,8 +133,18 @@ function AskBotPageContent() {
 
         <div className="flex-1 bg-box/5 backdrop-blur-sm rounded-2xl shadow-2xl border border-box/30 overflow-hidden flex flex-col max-h-[500px]">
           <ChatContainer messages={messages} isLoading={isLoading} />
-          <ChatInput onSend={handleSendMessage} disabled={isLoading} />
+          <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
         </div>
+
+        {/* Debug Info (remove in production) */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="mt-4 p-4 bg-gray-800 rounded text-xs text-gray-400 max-w-4xl w-full mx-auto">
+            <strong>Debug Info:</strong>
+            <div>API URL: {API_URL}</div>
+            <div>Messages: {messages.length}</div>
+            <div>Loading: {isLoading ? "Yes" : "No"}</div>
+          </div>
+        )}
       </main>
     </div>
   );
@@ -113,14 +152,16 @@ function AskBotPageContent() {
 
 export default function AskBotPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-highlight mx-auto mb-4"></div>
-          <p className="text-text-secondary">Loading chat...</p>
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ color: "var(--text)" }}
+        >
+          Loading chat...
         </div>
-      </div>
-    }>
+      }
+    >
       <AskBotPageContent />
     </Suspense>
   );

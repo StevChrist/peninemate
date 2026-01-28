@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from infrastructure.db_ops import ingest_one_movie
+from backend.peninemate.core_logic.db_ops import ingest_one_movie
 from core_logic.qa_db import (
     search_movies, 
     get_movie_cast_by_tmdb_id, 

@@ -1,5 +1,4 @@
 # api/routes.py
-
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional
 import logging
@@ -11,7 +10,6 @@ from .models import (
     RecommendationResponse, RecommendationRequest
 )
 
-# ✅ FIXED: Updated imports to match new qa_service.py
 from peninemate.core_logic.qa_service import answer_question_with_context, answer_question_with_llm
 from peninemate.core_logic.search_orchestrator import get_search_orchestrator
 from peninemate.core_logic.qa_db import get_movie_by_tmdb_id, get_credits_for_movie
@@ -21,7 +19,6 @@ from peninemate.infrastructure.cache_client import get_cache
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
-
 
 # ============================================================================
 # Q&A ENDPOINT
@@ -33,19 +30,19 @@ async def qa_endpoint(request: QuestionRequest):
     Main Q&A endpoint - answers questions about movies
     
     Request body:
-        - question: User's question (required)
-        - conversation_history: List of previous messages (optional)
+    - question: User's question (required)
+    - conversation_history: List of previous messages (optional)
     
     Response:
-        - answer: Natural language answer
-        - movies: List of relevant movies
-        - source: Data source (keyword/semantic/api/hybrid)
+    - answer: Natural language answer
+    - movies: List of relevant movies
+    - source: Data source (keyword/semantic/api/hybrid)
     """
     try:
         logger.info(f"📝 Q&A request: {request.question}")
         logger.info(f"📚 History length: {len(request.conversation_history)} messages")
         
-        # ✅ FIXED: Use answer_question_with_llm (the main function)
+        # Use answer_question_with_llm (OpenAI)
         answer, movies, source = answer_question_with_llm(
             question=request.question,
             conversation_history=request.conversation_history
@@ -60,7 +57,6 @@ async def qa_endpoint(request: QuestionRequest):
         if movies:
             for movie in movies:
                 try:
-                    # Ensure tmdb_id exists
                     if not movie.get('tmdb_id'):
                         logger.warning(f"⚠️ Movie without tmdb_id: {movie}")
                         continue
@@ -85,7 +81,7 @@ async def qa_endpoint(request: QuestionRequest):
             source=source,
             search_method=source
         )
-        
+    
     except Exception as e:
         logger.error(f"❌ Error in Q&A endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -105,14 +101,14 @@ async def search_movies(
     Search movies by title or description
     
     Query params:
-        - q: Search query (title, description, or keywords)
-        - year: Optional release year filter
-        - limit: Max results (1-20, default 5)
+    - q: Search query (title, description, or keywords)
+    - year: Optional release year filter
+    - limit: Max results (1-20, default 5)
     
     Response:
-        - results: List of matching movies
-        - total: Number of results
-        - source: Search method used
+    - results: List of matching movies
+    - total: Number of results
+    - source: Search method used
     """
     try:
         logger.info(f"🔍 Search request: q='{q}', year={year}, limit={limit}")
@@ -154,7 +150,7 @@ async def search_movies(
             total=len(movie_responses),
             source=source
         )
-        
+    
     except Exception as e:
         logger.error(f"❌ Error in search endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -170,10 +166,10 @@ async def get_movie_details(tmdb_id: int):
     Get detailed movie information including credits
     
     Path params:
-        - tmdb_id: TMDb movie ID
+    - tmdb_id: TMDb movie ID
     
     Response:
-        - Movie details with directors and cast
+    - Movie details with directors and cast
     """
     try:
         logger.info(f"🎬 Movie details request: tmdb_id={tmdb_id}")
@@ -184,7 +180,7 @@ async def get_movie_details(tmdb_id: int):
         if not movie:
             logger.warning(f"⚠️ Movie not found: tmdb_id={tmdb_id}")
             raise HTTPException(
-                status_code=404, 
+                status_code=404,
                 detail=f"Movie with tmdb_id {tmdb_id} not found"
             )
         
@@ -222,7 +218,7 @@ async def get_movie_details(tmdb_id: int):
             directors=directors,
             cast=cast_list[:10]  # Return top 10 cast
         )
-        
+    
     except HTTPException:
         raise
     except Exception as e:
@@ -240,23 +236,23 @@ async def recommend_movie_endpoint(request: RecommendationRequest):
     Movie recommendation endpoint based on user preferences
     
     Request body:
-        - genres: List of genres
-        - mood: List of moods
-        - theme: List of themes
-        - storyline: List of storyline elements
-        - year: List of year ranges
-        - duration: List of duration ranges
-        - durationComparison: "over" | "less" | "exact"
-        - exclude: List of movie titles to exclude
+    - genres: List of genres
+    - mood: List of moods
+    - theme: List of themes
+    - storyline: List of storyline elements
+    - year: List of year ranges
+    - duration: List of duration ranges
+    - durationComparison: "over" | "less" | "exact"
+    - exclude: List of movie titles to exclude
     
     Response:
-        - Recommended movie with details
+    - Recommended movie with details
     """
     try:
         logger.info(f"🎯 Recommendation request received")
-        logger.info(f"   Genres: {request.genres}")
-        logger.info(f"   Mood: {request.mood}")
-        logger.info(f"   Theme: {request.theme}")
+        logger.info(f"  Genres: {request.genres}")
+        logger.info(f"  Mood: {request.mood}")
+        logger.info(f"  Theme: {request.theme}")
         
         from peninemate.core_logic.recommendation_service import recommend_movie
         
@@ -273,7 +269,6 @@ async def recommend_movie_endpoint(request: RecommendationRequest):
         
         if not result:
             logger.warning("⚠️ No recommendation found for criteria")
-            # Return a default response if no match found
             return RecommendationResponse(
                 title="No recommendation found",
                 genre="N/A",
@@ -286,7 +281,7 @@ async def recommend_movie_endpoint(request: RecommendationRequest):
         
         logger.info(f"✅ Recommended: {result.get('title')}")
         return RecommendationResponse(**result)
-        
+    
     except Exception as e:
         logger.error(f"❌ Error in recommendation endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -302,11 +297,11 @@ async def health_check():
     Health check endpoint - returns system status
     
     Response:
-        - status: "ok" | "degraded" | "error"
-        - timestamp: Current timestamp
-        - database: DB connection status and counts
-        - cache: Cache statistics
-        - faiss: FAISS index status
+    - status: "ok" | "degraded" | "error"
+    - timestamp: Current timestamp
+    - database: DB connection status and counts
+    - cache: Cache statistics
+    - faiss: FAISS index status
     """
     try:
         # Check database
@@ -345,7 +340,7 @@ async def health_check():
         faiss_status = {"loaded": False, "vectors": 0}
         try:
             orchestrator = get_search_orchestrator()
-            # ✅ FIXED: Correct attribute name
+            
             if orchestrator.index is not None:
                 faiss_status["loaded"] = True
                 faiss_status["vectors"] = orchestrator.index.ntotal
@@ -364,7 +359,7 @@ async def health_check():
             cache=cache_status,
             faiss=faiss_status
         )
-        
+    
     except Exception as e:
         logger.error(f"❌ Error in health check: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -380,9 +375,9 @@ async def get_stats():
     System statistics endpoint
     
     Response:
-        - database_stats: DB statistics (movies, credits, people)
-        - cache_stats: Cache performance metrics
-        - faiss_stats: FAISS index information
+    - database_stats: DB statistics (movies, credits, people)
+    - cache_stats: Cache performance metrics
+    - faiss_stats: FAISS index information
     """
     try:
         # Database stats
@@ -422,7 +417,7 @@ async def get_stats():
         faiss_stats = {}
         try:
             orchestrator = get_search_orchestrator()
-            # ✅ FIXED: Correct attribute name
+            
             faiss_stats = {
                 "index_loaded": orchestrator.index is not None,
                 "total_vectors": orchestrator.index.ntotal if orchestrator.index else 0,
@@ -439,61 +434,62 @@ async def get_stats():
             cache_stats=cache_stats,
             faiss_stats=faiss_stats
         )
-        
+    
     except Exception as e:
         logger.error(f"❌ Error in stats endpoint: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ============================================================================
-# LLM STATUS ENDPOINT
+# LLM STATUS ENDPOINT (Updated untuk OpenAI)
 # ============================================================================
 
 @router.get("/llm/status")
 async def llm_status():
     """
-    Check LLM (Ollama) service status
+    Check LLM (OpenAI) service status
     
     Response:
     - status: "healthy" | "unhealthy" | "error"
     - model: Model name
     - available: Boolean
-    - base_url: Ollama URL
+    - provider: "OpenAI"
     """
     try:
         import os
-        import requests
+        from peninemate.infrastructure.llm_client import get_llm_client
         
-        ollama_url = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+        api_key = os.getenv("OPENAI_API_KEY")
         
-        response = requests.get(
-            f"{ollama_url}/api/tags",
-            timeout=5
-        )
+        if not api_key:
+            return {
+                "status": "error",
+                "error": "OPENAI_API_KEY not configured",
+                "provider": "OpenAI",
+                "model": "gpt-5-nano"
+            }
         
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            qwen_model = next(
-                (m for m in models if 'qwen2.5:3b-instruct' in m['name']),
-                None
-            )
+        try:
+            llm = get_llm_client()
             
             return {
                 "status": "healthy",
-                "model": "qwen2.5:3b-instruct",
-                "available": qwen_model is not None,
-                "base_url": ollama_url,
-                "model_size": qwen_model.get('size') if qwen_model else None
+                "model": "gpt-5-nano",
+                "available": True,
+                "provider": "OpenAI",
+                "api_key_configured": True
             }
-        else:
+        except Exception as e:
             return {
                 "status": "unhealthy",
-                "error": f"Ollama returned {response.status_code}",
-                "base_url": ollama_url
+                "error": str(e),
+                "provider": "OpenAI",
+                "model": "gpt-5-nano"
             }
-            
+    
     except Exception as e:
         return {
             "status": "error",
             "error": str(e),
-            "base_url": os.getenv("OLLAMA_BASE_URL", "http://172.17.0.1:11434")
+            "provider": "OpenAI"
         }

@@ -28,8 +28,11 @@ export default function AboutPage() {
             <strong>PostgreSQL</strong> for structured data storage and{" "}
             <strong>FAISS</strong> for efficient vector similarity search, while
             its language understanding and reasoning capabilities are powered by
-            the <strong>Llama 3.1 8B Instruct</strong> large language model,
+            the <strong>Qwen 2.5 3B Instruct model via Ollama</strong> large language model,
             deployed in a quantized Q4 configuration for optimized performance.
+          </p>
+          <p>
+            The project is already usable but still needs to be developed further.
           </p>
         </div>
 
@@ -69,7 +72,7 @@ export default function AboutPage() {
 
           {/* PEN Logo - Using PNG file */}
           <a
-            href="https://stevchrist.vercel.app/"
+            href="https://stevchrist.site/"
             target="_blank"
             rel="noopener noreferrer"
             className="transition-transform duration-300 hover:scale-110"
@@ -87,7 +90,7 @@ export default function AboutPage() {
 
       {/* Footer - Always at bottom */}
       <footer className="py-6 text-center text-gray-400 text-sm">
-        <p>2026 | V1.0 | Pen.</p>
+        <p>2026 | V1.2.0 | Pen.</p>
       </footer>
     </div>
   );

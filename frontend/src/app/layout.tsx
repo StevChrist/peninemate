@@ -17,6 +17,9 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "PenineMate - AI Movie Q&A",
   description: "Ask anything about movies powered by AI",
+  icons: {
+    icon: 'peninemate_logo.png',
+  },
 };
 
 export default function RootLayout({

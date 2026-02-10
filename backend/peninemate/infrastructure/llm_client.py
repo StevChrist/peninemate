@@ -154,8 +154,11 @@ Return JSON:"""
             'general_info': 'Provide: Title (Year) followed by full plot description (2-3 sentences)',
             'unknown': 'Provide: Title (Year) followed by full plot description (2-3 sentences)',
             'specific_movie_question': 'Provide: Title (Year) followed by full plot description (2-3 sentences)',
-            'franchise': 'List ALL movies in the franchise found in movie_data. Format: "There are [X] [Franchise] movies: 1. [Title] ([Year]), 2. [Title] ([Year]), etc." Be comprehensive and list all available.',  # ← ADD THIS
-            'plot': 'Provide ONLY the plot/description of the movie (2-3 sentences). DO NOT include title or year.',
+            'franchise': 'List ALL movies in the franchise found in movie_data. Format: "There are [X] [Franchise] movies: 1. [Title] ([Year]), 2. [Title] ([Year]), etc." Be comprehensive and list all available.',
+            
+            # ✅ UPDATED - Plot dengan title
+            'plot': 'Format: "[Title] ([Year]). [Plot description in 2-3 sentences]". ALWAYS start with the movie title and year, then provide the full plot description.',
+            
             'cast': 'List the main cast members (up to 8 actors). Format: "The cast of [Title] ([Year]) includes [names]."',
             'director': 'Mention the director(s) of the film. Format: "[Title] ([Year]) was directed by [names]."',
             'year': 'State the release year. Format: "[Title] was released in [year]."',
@@ -168,51 +171,48 @@ Return JSON:"""
         
         prompt = f"""Answer this movie question naturally in {lang_instruction}:
 
-**User Question**: "{question}"
+    **User Question**: "{question}"
 
-**Intent**: {intent}
+    **Intent**: {intent}
 
-**What to provide**: {instruction}
+    **What to provide**: {instruction}
 
-**Movie Data**:
-{movie_str}
+    **Movie Data**:
+    {movie_str}
 
-**Recent Conversation**:
-{context if context else "None"}
+    **Recent Conversation**:
+    {context if context else "None"}
 
-**STRICT RULES**:
-1. For "movie_info" intent: MUST start with "Title (Year)" then give description
-2. For "plot" intent: Give ONLY description, NO title/year
-3. For "cast" intent: List all available cast members
-4. For "location" intent: Apologize and suggest other available information
-5. Answer directly and naturally (don't say "based on the data")
-6. Use conversational tone
-7. Keep answer concise but complete
-8. If data is missing, acknowledge it gracefully
+    **STRICT RULES**:
+    1. For "movie_info" intent: MUST start with "Title (Year)" then give description
+    2. For "plot" intent: MUST start with "Title (Year)." then give description (NOT just description alone)
+    3. For "cast" intent: List all available cast members
+    4. For "location" intent: Apologize and suggest other available information
+    5. Answer directly and naturally (don't say "based on the data")
+    6. Use conversational tone
+    7. Keep answer concise but complete
+    8. If data is missing, acknowledge it gracefully
+    9. ALWAYS include the movie title when describing a movie
 
-**Language**: {lang_instruction}
+    **Language**: {lang_instruction}
 
-Generate answer:"""
+    Generate answer:"""
         
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": f"You are a helpful movie information assistant. Answer in {lang_instruction} only. Follow the intent instructions exactly."},
+                    {"role": "system", "content": f"You are a helpful movie information assistant. Answer in {lang_instruction} only. Follow the intent instructions exactly. Always include movie title in your response."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=350,
                 temperature=0.7
             )
             
-            # ✅ FIX: Access response correctly
-            if response and response.choices and len(response.choices) > 0:
-                answer = response.choices[0].message.content.strip()
-                logger.info(f"✅ LLM Answer generated: {len(answer)} chars")
-                return answer
-            else:
-                logger.error("❌ Invalid response structure from OpenAI")
-                return self._generate_simple_answer(movie_data, intent, language)
+            # ✅ Access response correctly
+            answer = response.choices[0].message.content.strip()
+            logger.info(f"✅ LLM Answer generated: {len(answer)} chars")
+            return answer
             
         except Exception as e:
             logger.error(f"❌ LLM answer generation error: {e}")
@@ -285,7 +285,10 @@ Generate answer:"""
             if intent == "location":
                 return f"Maaf, saya tidak memiliki informasi tentang lokasi pengambilan gambar untuk film {title}{year_str}. Saya dapat memberikan informasi tentang sinopsis, pemain, sutradara, tahun rilis, atau rating film. Apakah Anda ingin mengetahui salah satunya?"
             elif intent == "plot":
-                return overview if overview else f"Deskripsi untuk {title}{year_str} tidak tersedia."
+                if overview:
+                    return f"{title}{year_str}. {overview}"  # ← Add title
+                else:
+                    return f"Maaf, saya tidak memiliki deskripsi untuk {title}{year_str}." if language == "id" else f"I don't have a description for {title}{year_str}."
             elif intent == "cast":
                 if cast:
                     return f"Pemain dalam film {title}{year_str} termasuk {', '.join(cast[:5])}."

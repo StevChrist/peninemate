@@ -1,20 +1,19 @@
-
 services:
   postgres:
     image: postgres:15-alpine
     container_name: peninemate_postgres
     environment:
-      POSTGRES_DB: peninematedb
+      POSTGRES_DB: peninemate_db
       POSTGRES_USER: peninemate_user
       POSTGRES_PASSWORD: peninemate_pass_2026
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     networks:
       - peninemate_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U peninemate_user -d peninemate_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,16 +25,9 @@ services:
       dockerfile: Dockerfile
     container_name: peninemate_backend
     ports:
-      - "8000:8000"
-    environment:
-      - DATABASE_URL=postgresql://peninemate_user:peninemate_pass_2026@postgres:5432/peninemate_db
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_NAME=peninemate_db
-      - DB_USER=peninemate_user
-      - DB_PASSWORD=peninenemate_pass_2026
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - TMDB_API_KEY=7a2f8c4d1f20c491b2d6e60f435f11bf
+      - "127.0.0.1:8000:8000"
+    env_file:
+      - ./backend/.env
     volumes:
       - ./backend:/app
     depends_on:
@@ -43,8 +35,6 @@ services:
         condition: service_healthy
     networks:
       - peninemate_network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -58,9 +48,9 @@ services:
       dockerfile: Dockerfile
     container_name: peninemate_frontend
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://100.118.33.12:8000
+      - NEXT_PUBLIC_API_URL=https://peninemate-api.stevchrist.site
     depends_on:
       - backend
     networks:

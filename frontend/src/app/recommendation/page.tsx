@@ -31,7 +31,7 @@ export default function RecommendationPage() {
     setIsLoading(true);
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "https://peninemate.stevchrist.site";
       const response = await fetch(`${apiUrl}/api/v1/recommend`, {
         method: "POST",
         headers: {

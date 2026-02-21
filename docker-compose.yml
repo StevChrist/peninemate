@@ -46,11 +46,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://peninemate.stevchrist.site
     container_name: peninemate_frontend
     ports:
       - "127.0.0.1:3001:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=https://peninemate-api.stevchrist.site
+      - NEXT_PUBLIC_API_URL=https://peninemate.stevchrist.site
     depends_on:
       - backend
     networks:

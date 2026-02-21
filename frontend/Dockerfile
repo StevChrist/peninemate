@@ -11,6 +11,10 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# ✅ Inject build-time env variable
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 # Build application
 RUN npm run build
 

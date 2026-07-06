@@ -22,36 +22,36 @@ def recommend_movie(
     exclude: List[str] = None
 ) -> Optional[Dict]:
     """
-    Recommend a movie based on user preferences
-    Flow: DB → TMDb API (with auto-save) → Empty Result
-    
-    Args:
-        genres: List of preferred genres
-        mood: List of moods (not used for DB query)
-        theme: List of themes (not used for DB query)
-        storyline: List of storyline preferences (not used for DB query)
-        year: List of preferred years
-        duration: List of duration values in minutes (not supported in DB)
-        duration_comparison: "over", "less", or "exact" (not supported in DB)
-        exclude: List of movie titles to exclude
-    
-    Returns:
-        Dict with movie information or None if no match found
+    Recommend a movie based on user preferences.
+    Flow: TMDb API first (with auto-save to DB) → Fallback to local DB → Empty Result
     """
-    logger.info(f"🎯 Recommendation request: genres={genres}, year={year}")
+    logger.info(f"🎯 Recommendation request: genres={genres}, year={year}, exclude={exclude}")
     
-    # Step 1: Try DB first
-    db_result = _search_from_db(genres, year, exclude)
-    if db_result:
-        logger.info(f"✅ DB result: {db_result['title']}")
-        return db_result
-    
-    # Step 2: If DB empty, try TMDb API + auto-save
-    logger.info("📡 Trying TMDb API fallback with auto-save...")
-    tmdb_result = _search_from_tmdb_with_save(genres, year)
+    # Step 1: Try TMDb API first with auto-save
+    logger.info("📡 Trying TMDb API first with auto-save...")
+    tmdb_result = _search_from_tmdb_with_save(
+        genres=genres,
+        year=year,
+        duration=duration,
+        duration_comparison=duration_comparison,
+        exclude=exclude
+    )
     if tmdb_result:
         logger.info(f"✅ TMDb result (saved): {tmdb_result['title']}")
         return tmdb_result
+    
+    # Step 2: Fallback to local DB
+    logger.info("📡 Trying DB fallback...")
+    db_result = _search_from_db(
+        genres=genres,
+        year=year,
+        duration=duration,
+        duration_comparison=duration_comparison,
+        exclude=exclude
+    )
+    if db_result:
+        logger.info(f"✅ DB result: {db_result['title']}")
+        return db_result
     
     # Step 3: No results found
     logger.warning("⚠️ No recommendation found")
@@ -61,6 +61,8 @@ def recommend_movie(
 def _search_from_db(
     genres: List[str] = None,
     year: List[str] = None,
+    duration: List[str] = None,
+    duration_comparison: str = "exact",
     exclude: List[str] = None
 ) -> Optional[Dict]:
     """Search movies from local database"""
@@ -68,7 +70,7 @@ def _search_from_db(
     cursor = conn.cursor()
     
     try:
-        # Base query - only columns that DEFINITELY exist
+        # Base query - include m.runtime
         query = """
             SELECT DISTINCT
                 m.tmdb_id,
@@ -78,7 +80,8 @@ def _search_from_db(
                 m.popularity,
                 m.vote_average,
                 m.genres_csv,
-                m.year
+                m.year,
+                m.runtime
             FROM movies m
             WHERE m.vote_average > 0
         """
@@ -104,6 +107,23 @@ def _search_from_db(
                 query += " AND m.year = ANY(%s)"
                 params.append(year_values)
         
+        # Filter by duration
+        if duration:
+            try:
+                d_clean = duration[0].replace("minute", "").replace("minutes", "").strip()
+                duration_val = int(d_clean)
+                if duration_comparison == "over":
+                    query += " AND m.runtime >= %s"
+                    params.append(duration_val)
+                elif duration_comparison == "less":
+                    query += " AND m.runtime <= %s"
+                    params.append(duration_val)
+                elif duration_comparison == "exact":
+                    query += " AND m.runtime BETWEEN %s AND %s"
+                    params.extend([duration_val - 15, duration_val + 15])
+            except ValueError:
+                pass
+
         # Exclude movies
         if exclude:
             placeholders = ','.join(['%s'] * len(exclude))
@@ -147,10 +167,10 @@ def _search_from_db(
             "tmdb_id": movie_data[0],
             "title": f"{movie_data[1]} ({year_val})" if movie_data[1] else "Unknown Movie",
             "genre": movie_data[6] if movie_data[6] else "N/A",
-            "duration": 0,  # DB doesn't have runtime
+            "duration": movie_data[8] if movie_data[8] else 0,
             "cast": cast,
             "rating": float(movie_data[5]) if movie_data[5] else 0.0,
-            "region": "Unknown",  # DB doesn't have production_countries
+            "region": "Unknown",
             "overview": movie_data[3] if movie_data[3] else "No overview available"
         }
         
@@ -165,12 +185,13 @@ def _search_from_db(
 
 def _search_from_tmdb_with_save(
     genres: List[str] = None,
-    year: List[str] = None
+    year: List[str] = None,
+    duration: List[str] = None,
+    duration_comparison: str = "exact",
+    exclude: List[str] = None
 ) -> Optional[Dict]:
     """
-    Fallback: Search movies from TMDb API + Auto-save to DB
-    
-    ✅ NEW: After finding movie, saves it to PostgreSQL for future queries
+    Search movies from TMDb API + Auto-save to DB and FAISS
     """
     try:
         tmdb = get_tmdb_client()
@@ -187,7 +208,6 @@ def _search_from_tmdb_with_save(
         
         # Add genre filter
         if genres:
-            # Map genre names to TMDb genre IDs
             genre_map = {
                 "Action": 28,
                 "Adventure": 12,
@@ -239,9 +259,62 @@ def _search_from_tmdb_with_save(
         
         logger.info(f"📊 TMDb returned {len(movies)} movies")
         
-        # Get random movie from results
-        movie = random.choice(movies[:10])  # Pick from top 10
-        tmdb_id = movie['id']
+        # Filter movies based on exclude and duration
+        exclude_lower = [t.lower() for t in exclude] if exclude else []
+        
+        # Parse duration
+        duration_val = None
+        if duration and len(duration) > 0:
+            try:
+                d_clean = duration[0].replace("minute", "").replace("minutes", "").strip()
+                duration_val = int(d_clean)
+            except ValueError:
+                pass
+
+        eligible_movies = []
+        for movie in movies:
+            title = movie.get('title', '')
+            if title.lower() in exclude_lower:
+                continue
+                
+            tmdb_id = movie['id']
+            # Fetch details for runtime
+            details = tmdb.get_movie_details(tmdb_id)
+            if not details:
+                continue
+                
+            # Filter by duration if specified
+            if duration_val is not None:
+                runtime = details.get('runtime', 0) or 0
+                if duration_comparison == "over":
+                    if runtime < duration_val:
+                        continue
+                elif duration_comparison == "less":
+                    if runtime > duration_val:
+                        continue
+                elif duration_comparison == "exact":
+                    if abs(runtime - duration_val) > 15: # Allow +/- 15 mins for exact matching
+                        continue
+            
+            eligible_movies.append((movie, details))
+            
+        if not eligible_movies:
+            logger.warning("⚠️ No movies matched filters, relaxing duration filters")
+            # If no matches with duration, relax and only filter by exclude
+            for movie in movies:
+                title = movie.get('title', '')
+                if title.lower() not in exclude_lower:
+                    details = tmdb.get_movie_details(movie['id'])
+                    if details:
+                        eligible_movies.append((movie, details))
+                        
+        if not eligible_movies:
+            logger.warning("📭 No eligible movies after filtering")
+            return None
+            
+        # Get random movie from eligible results (pick from top 10 eligible)
+        selected_movie, selected_details = random.choice(eligible_movies[:10])
+        tmdb_id = selected_movie['id']
         
         # Get credits
         credits = tmdb.get_movie_credits(tmdb_id)
@@ -249,36 +322,33 @@ def _search_from_tmdb_with_save(
         if credits and 'cast' in credits:
             cast = [c['name'] for c in credits['cast'][:5]]
         
-        # Get details for runtime and production countries
-        details = tmdb.get_movie_details(tmdb_id)
-        
         # Get country
         region = "Unknown"
-        if details and 'production_countries' in details:
-            countries = details.get('production_countries', [])
+        if selected_details and 'production_countries' in selected_details:
+            countries = selected_details.get('production_countries', [])
             if countries and len(countries) > 0:
                 region = countries[0].get('name', 'Unknown')
         
         # Get genres
         genre_names = []
-        if details and 'genres' in details:
-            genre_names = [g['name'] for g in details['genres']]
+        if selected_details and 'genres' in selected_details:
+            genre_names = [g['name'] for g in selected_details['genres']]
         
         # Extract year from release_date
         release_year = ""
-        if movie.get('release_date'):
-            release_year = movie['release_date'][:4]
+        if selected_movie.get('release_date'):
+            release_year = selected_movie['release_date'][:4]
         
-        # ✅ NEW: Save movie to database + FAISS for future use
+        # Save movie to database + FAISS for future use
         try:
-            logger.info(f"💾 Saving movie to DB: {movie['title']} ({release_year})")
+            logger.info(f"💾 Saving movie to DB: {selected_movie['title']} ({release_year})")
             from peninemate.core_logic.db_ops import save_movie_to_db
             save_success = save_movie_to_db(tmdb_id)
             
             if save_success:
                 logger.info(f"✅ Movie saved to DB successfully")
                 
-                # ✅ ALSO: Add to FAISS index
+                # Add to FAISS index
                 try:
                     from peninemate.core_logic.faiss_ops import add_movie_to_faiss
                     add_movie_to_faiss(tmdb_id)
@@ -288,17 +358,16 @@ def _search_from_tmdb_with_save(
             
         except Exception as save_error:
             logger.warning(f"⚠️ Could not save movie to DB: {save_error}")
-            # Continue anyway - saving is optional
         
         result = {
             "tmdb_id": tmdb_id,
-            "title": f"{movie['title']} ({release_year})" if movie.get('title') else "Unknown Movie",
+            "title": f"{selected_movie['title']} ({release_year})" if selected_movie.get('title') else "Unknown Movie",
             "genre": ", ".join(genre_names) if genre_names else "N/A",
-            "duration": details.get('runtime', 0) if details else 0,
+            "duration": selected_details.get('runtime', 0) if selected_details else 0,
             "cast": cast,
-            "rating": float(movie.get('vote_average', 0.0)),
+            "rating": float(selected_movie.get('vote_average', 0.0)),
             "region": region,
-            "overview": movie.get('overview', 'No overview available')
+            "overview": selected_movie.get('overview', 'No overview available')
         }
         
         return result

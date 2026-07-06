@@ -45,6 +45,14 @@ class SearchOrchestrator:
             self.index = None
             self.metadata = []
     
+    def reload_index(self):
+        """Reload FAISS index and metadata from disk"""
+        if self.index_path.exists():
+            self.index = faiss.read_index(str(self.index_path))
+            with open(self.metadata_path, 'r', encoding='utf-8') as f:
+                self.metadata = json.load(f)
+            logger.info(f"✅ FAISS index reloaded: {self.index.ntotal} vectors")
+    
     
     def _enhance_query(self, query: str) -> str:
         """

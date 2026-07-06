@@ -139,6 +139,15 @@ def add_movie_to_faiss(tmdb_id: int) -> bool:
             f"(total vectors: {index.ntotal})"
         )
 
+        # Notify/Reload search orchestrator singleton in memory if initialized
+        try:
+            from peninemate.core_logic.search_orchestrator import get_search_orchestrator
+            orch = get_search_orchestrator()
+            if orch:
+                orch.reload_index()
+        except Exception as reload_error:
+            logger.warning(f"⚠️ Could not reload search orchestrator FAISS index: {reload_error}")
+
         return True
 
     except Exception as e:

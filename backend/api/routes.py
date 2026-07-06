@@ -1,8 +1,9 @@
 # api/routes.py
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, Tuple
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import threading
 
 from .models import (
     QuestionRequest, QAResponse, SearchResponse, MovieDetailResponse,
@@ -17,6 +18,35 @@ from peninemate.infrastructure.db_client import get_conn
 from peninemate.infrastructure.cache_client import get_cache
 
 logger = logging.getLogger(__name__)
+
+class GlobalChatRateLimiter:
+    def __init__(self, limit: int = 100):
+        self.limit = limit
+        self.lock = threading.Lock()
+        self.count = 0
+        self.reset_date = None # YYYY-MM-DD
+        
+    def check_limit(self) -> Tuple[bool, str]:
+        tz_wib = timezone(timedelta(hours=7))
+        now_wib = datetime.now(tz_wib)
+        current_date_str = now_wib.strftime("%Y-%m-%d")
+        
+        tomorrow_wib = (now_wib + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        months_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+        reset_time_str = f"{tomorrow_wib.day} {months_id[tomorrow_wib.month - 1]} {tomorrow_wib.year} pukul 00:00 WIB"
+        
+        with self.lock:
+            if self.reset_date != current_date_str:
+                self.count = 0
+                self.reset_date = current_date_str
+                
+            if self.count >= self.limit:
+                return False, reset_time_str
+                
+            self.count += 1
+            return True, reset_time_str
+
+chat_limiter = GlobalChatRateLimiter(limit=100)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -40,6 +70,23 @@ async def qa_endpoint(request: QuestionRequest):
     """
     try:
         logger.info(f"📝 Q&A request: {request.question}")
+        
+        # Check daily chat limit
+        is_allowed, reset_time_str = chat_limiter.check_limit()
+        if not is_allowed:
+            limit_message = (
+                f"Maaf, limit chat harian global (100 chat) telah habis. "
+                f"Anda hanya dapat menggunakan fitur Recommendation untuk saat ini. "
+                f"Limit akan di-reset pada {reset_time_str}."
+            )
+            logger.warning("🚫 Daily global chat limit reached. Limit message returned.")
+            return QAResponse(
+                answer=limit_message,
+                movies=[],
+                source="limit_reached",
+                search_method="none"
+            )
+            
         logger.info(f"📚 History length: {len(request.conversation_history)} messages")
         
         # Use answer_question_with_llm (OpenAI)

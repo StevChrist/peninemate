@@ -50,6 +50,29 @@ chat_limiter = GlobalChatRateLimiter(limit=100)
 
 router = APIRouter(prefix="/api/v1")
 
+@router.get("/chat-limit")
+async def get_chat_limit():
+    from datetime import datetime, timezone, timedelta
+    tz_wib = timezone(timedelta(hours=7))
+    now_wib = datetime.now(tz_wib)
+    current_date_str = now_wib.strftime("%Y-%m-%d")
+    
+    tomorrow_wib = (now_wib + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    months_id = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"]
+    reset_time_str = f"{tomorrow_wib.day} {months_id[tomorrow_wib.month - 1]} {tomorrow_wib.year} pukul 00:00 WIB"
+    
+    with chat_limiter.lock:
+        if chat_limiter.reset_date != current_date_str:
+            chat_limiter.count = 0
+            chat_limiter.reset_date = current_date_str
+            
+        remaining = max(0, chat_limiter.limit - chat_limiter.count)
+        return {
+            "remaining_chats": remaining,
+            "max_chats": chat_limiter.limit,
+            "reset_time": reset_time_str
+        }
+
 # ============================================================================
 # Q&A ENDPOINT
 # ============================================================================
@@ -84,7 +107,10 @@ async def qa_endpoint(request: QuestionRequest):
                 answer=limit_message,
                 movies=[],
                 source="limit_reached",
-                search_method="none"
+                search_method="none",
+                remaining_chats=0,
+                max_chats=chat_limiter.limit,
+                reset_time=reset_time_str
             )
             
         logger.info(f"📚 History length: {len(request.conversation_history)} messages")
@@ -126,7 +152,10 @@ async def qa_endpoint(request: QuestionRequest):
             answer=answer,
             movies=movie_responses,
             source=source,
-            search_method=source
+            search_method=source,
+            remaining_chats=max(0, chat_limiter.limit - chat_limiter.count),
+            max_chats=chat_limiter.limit,
+            reset_time=reset_time_str
         )
     
     except Exception as e:

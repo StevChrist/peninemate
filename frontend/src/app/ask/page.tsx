@@ -12,10 +12,39 @@ function AskBotPageContent() {
   const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [limitInfo, setLimitInfo] = useState<{
+    remaining_chats: number;
+    max_chats: number;
+    reset_time: string;
+  }>({
+    remaining_chats: 100,
+    max_chats: 100,
+    reset_time: "loading...",
+  });
   const initialQueryProcessed = useRef(false);
 
   // ✅ Dynamic API URL - auto-detect environment
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://peninemate.stevchrist.site";
+
+  // Fetch initial limit info
+  useEffect(() => {
+    async function fetchLimit() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/chat-limit`);
+        if (res.ok) {
+          const data = await res.json();
+          setLimitInfo({
+            remaining_chats: data.remaining_chats,
+            max_chats: data.max_chats,
+            reset_time: data.reset_time,
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch chat limit:", err);
+      }
+    }
+    fetchLimit();
+  }, [API_URL]);
 
   // ✅ FIX: Wrap with useCallback to satisfy useEffect dependency
   const handleSendMessage = useCallback(
@@ -64,6 +93,15 @@ function AskBotPageContent() {
 
         const data = await response.json();
         console.log("📦 Response data:", data);
+
+        // Update limit info if returned in API response
+        if (data.remaining_chats !== undefined && data.max_chats !== undefined && data.reset_time) {
+          setLimitInfo({
+            remaining_chats: data.remaining_chats,
+            max_chats: data.max_chats,
+            reset_time: data.reset_time,
+          });
+        }
 
         // Extract answer
         const aiMessage: Message = {
@@ -134,6 +172,10 @@ function AskBotPageContent() {
         <div className="flex-1 bg-box/5 backdrop-blur-sm rounded-2xl shadow-2xl border border-box/30 overflow-hidden flex flex-col max-h-[500px]">
           <ChatContainer messages={messages} isLoading={isLoading} />
           <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        </div>
+
+        <div className="text-center text-xs mt-3 opacity-60" style={{ color: "var(--text)" }}>
+          remaining credit {limitInfo.remaining_chats}/{limitInfo.max_chats} . reset at {limitInfo.reset_time}
         </div>
 
         {/* Debug Info (remove in production)

@@ -21,6 +21,9 @@ class QAResponse(BaseModel):
     movies: List[MovieResponse] = []
     source: Optional[str] = None
     search_method: Optional[str] = None
+    remaining_chats: Optional[int] = None
+    max_chats: Optional[int] = None
+    reset_time: Optional[str] = None
 
 class SearchResponse(BaseModel):
     results: List[MovieResponse]

@@ -5,11 +5,36 @@ import Image from "next/image";
 import { useState } from "react";
 
 export default function AboutPage() {
-  const [selectedVersion, setSelectedVersion] = useState<"1.2.0" | "1.1.0">("1.2.0");
+  const [selectedVersion, setSelectedVersion] = useState<"1.2.1" | "1.2.0" | "1.1.0">("1.2.1");
 
   const versionContent = {
+    "1.2.1": {
+      title: "Version 1.2.1 (Current)",
+      llm: "OpenAI GPT-5-nano",
+      embedding: "OpenAI text-embedding-3-small (1536 dimensions)",
+      description: `PenineMate is a non-commercial, academic AI-powered movie assistant 
+        developed for educational and portfolio purposes. The application leverages multiple 
+        data sources, including the TMDb API for movie metadata, cast information, and 
+        popularity metrics, as well as Box Office and MovieLens datasets to enhance movie 
+        question answering and semantic-based recommendation features.`,
+      architecture: `PenineMate is built using PostgreSQL for structured data storage and 
+        FAISS for efficient vector similarity search. The system's language understanding 
+        and reasoning capabilities are powered by OpenAI's GPT-5-nano model for natural 
+        language processing and intent classification, while vector embeddings are generated 
+        using OpenAI's text-embedding-3-small model (1536-dimensional) for semantic search 
+        and similarity matching.`,
+      updates: [
+        "Language Model: OpenAI GPT-4o-mini → OpenAI GPT-5-nano",
+        "Embedding Model: Sentence-Transformers (384d) → OpenAI text-embedding-3-small (1536d)",
+        "Enhanced semantic search accuracy with 4x larger embedding dimensions",
+        "Improved intent classification and natural language understanding",
+        "Added franchise detection for 'How many X films?' type queries",
+        "Better multilingual support for English and Indonesian conversations",
+        "Optimized response generation with cloud-based LLM infrastructure"
+      ]
+    },
     "1.2.0": {
-      title: "Version 1.2.0 (Current)",
+      title: "Version 1.2.0 (Previous)",
       llm: "OpenAI GPT-4o-mini",
       embedding: "OpenAI text-embedding-3-small (1536 dimensions)",
       description: `PenineMate is a non-commercial, academic AI-powered movie assistant 
@@ -76,6 +101,16 @@ export default function AboutPage() {
         {/* Version Selector */}
         <div className="flex justify-center gap-4 mb-8">
           <button
+            onClick={() => setSelectedVersion("1.2.1")}
+            className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 ${
+              selectedVersion === "1.2.1"
+                ? "bg-highlight text-background"
+                : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+            }`}
+          >
+            v1.2.1 (Current)
+          </button>
+          <button
             onClick={() => setSelectedVersion("1.2.0")}
             className={`px-6 py-2 rounded-lg font-medium transition-all duration-300 ${
               selectedVersion === "1.2.0"
@@ -83,7 +118,7 @@ export default function AboutPage() {
                 : "bg-gray-700 text-gray-300 hover:bg-gray-600"
             }`}
           >
-            v1.2.0 (Current)
+            v1.2.0
           </button>
           <button
             onClick={() => setSelectedVersion("1.1.0")}
@@ -93,7 +128,7 @@ export default function AboutPage() {
                 : "bg-gray-700 text-gray-300 hover:bg-gray-600"
             }`}
           >
-            v1.1.0 (Previous)
+            v1.1.0
           </button>
         </div>
 

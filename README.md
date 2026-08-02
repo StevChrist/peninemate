@@ -170,63 +170,7 @@ The system tries TMDb discovery first, then falls back to local database matchin
 
 ---
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker Desktop / Docker Engine
-- Node.js 20+ (for local frontend work)
-- Python 3.11+
-- Access to the required environment variables for database, OpenAI, and TMDb
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/your-username/PenineMate.git
-cd PenineMate
-```
-
-### 2. Configure environment variables
-
-Create a `.env` file inside `backend/` and fill in the required settings, for example:
-
-```env
-DB_HOST=postgres
-DB_PORT=5432
-DB_NAME=peninemate_db
-DB_USER=peninemate_user
-DB_PASSWORD=peninemate_pass_2026
-DATABASE_URL=postgresql://peninemate_user:peninemate_pass_2026@postgres:5432/peninemate_db
-OPENAI_API_KEY=your_openai_key
-OPENAI_LLM_MODEL=gpt-4o-mini
-TMDB_API_KEY=your_tmdb_key
-```
-
-For frontend runtime, set:
-
-```env
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
-
-### 3. Start the app with Docker
-
-```bash
-docker compose up --build
-```
-
-This will start:
-- PostgreSQL on port `5432`
-- FastAPI backend on port `8000`
-- Next.js frontend on port `3001` in the Compose setup
-
-### 4. Open the app
-
-- Frontend: http://localhost:3001
-- Backend docs: http://localhost:8000/docs
-
----
-
-## 📁 Project Structure
+##  Project Structure
 
 ```text
 PenineMate/
